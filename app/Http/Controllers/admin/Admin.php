@@ -24,53 +24,89 @@ use PromptPayQR\Builder;
 
 class Admin extends Controller
 {
-    public function dashboard()
-    {
-        $data['function_key'] = __FUNCTION__;
-        if (session('user')->is_rider != 1) {
-            $data['orderday'] = Orders::select(DB::raw("SUM(total)as total"))->where('status', 3)->whereDay('created_at', date('d'))->first();
-            $data['ordermouth'] = Orders::select(DB::raw("SUM(total)as total"))->where('status', 3)->whereMonth('created_at', date('m'))->first();
-            $data['orderyear'] = Orders::select(DB::raw("SUM(total)as total"))->where('status', 3)->whereYear('created_at', date('Y'))->first();
-            $data['moneyDay'] = Pay::select(DB::raw("SUM(total)as total"))->where('is_type', 0)->whereDay('created_at', date('d'))->first();
-            $data['transferDay'] = Pay::select(DB::raw("SUM(total)as total"))->where('is_type', 1)->whereDay('created_at', date('d'))->first();
-            $data['delivery'] = Orders::where('status', 3)->where('table_id')->whereDay('created_at', date('d'))->count();
-        } else {
-            $data['delivery_day'] = Orders::join('rider_sends', 'rider_sends.order_id', '=', 'orders.id')
-                ->where('orders.status', 3)
-                ->where('rider_id', session('user')->id)
-                ->whereDay('orders.created_at', date('d'))
-                ->count();
-            $data['delivery_mouth'] = Orders::join('rider_sends', 'rider_sends.order_id', '=', 'orders.id')
-                ->where('orders.status', 3)
-                ->where('rider_id', session('user')->id)
-                ->whereMonth('orders.created_at', date('m'))
-                ->count();
-        }
-        $data['ordertotal'] = Orders::count();
-        $data['rider'] = User::where('is_rider', 1)->get();
-
-        $menu = Menu::select('id', 'name')->get();
-        $item_menu = array();
-        $item_order = array();
-        if (count($menu) > 0) {
-            foreach ($menu as $rs) {
-                $item_menu[] = $rs->name;
-                $menu_order = OrdersDetails::Join('orders', 'orders.id', '=', 'orders_details.order_id')->where('orders.status', 3)->where('menu_id', $rs->id)->groupBy('menu_id')->count();
-                $item_order[] = $menu_order;
-            }
-        }
-
-        $item_mouth = array();
-        for ($i = 1; $i < 13; $i++) {
-            $query = Orders::select(DB::raw("SUM(total)as total"))->where('status', 3)->whereMonth('created_at', date($i))->first();
-            $item_mouth[] = $query->total;
-        }
-        $data['item_menu'] = $item_menu;
-        $data['item_order'] = $item_order;
-        $data['item_mouth'] = $item_mouth;
-        $data['config'] = Config::first();
-        return view('dashboard', $data);
+   public function dashboard(): Factory|View
+{
+    $data['function_key'] = __FUNCTION__;
+    if (session('user')->is_rider != 1) {
+        $data['orderday'] = Orders::select(DB::raw("SUM(total)as total"))
+            ->where('status', 3)
+            ->whereDate('created_at', date('Y-m-d'))
+            ->first();
+            
+        $data['ordermouth'] = Orders::select(DB::raw("SUM(total)as total"))
+            ->where('status', 3)
+            ->whereMonth('created_at', date('m'))
+            ->whereYear('created_at', date('Y'))
+            ->first();
+            
+        $data['orderyear'] = Orders::select(DB::raw("SUM(total)as total"))
+            ->where('status', 3)
+            ->whereYear('created_at', date('Y'))
+            ->first();
+            
+        $data['moneyDay'] = Pay::select(DB::raw("SUM(total)as total"))
+            ->where('is_type', 0)
+            ->whereDate('created_at', date('Y-m-d'))
+            ->first();
+            
+        $data['transferDay'] = Pay::select(DB::raw("SUM(total)as total"))
+            ->where('is_type', 1)
+            ->whereDate('created_at', date('Y-m-d'))
+            ->first();
+            
+        $data['delivery'] = Orders::where('status', 3)
+            ->whereNotNull('table_id')
+            ->whereDate('created_at', date('Y-m-d'))
+            ->count();
+    } else {
+        $data['delivery_day'] = Orders::join('rider_sends', 'rider_sends.order_id', '=', 'orders.id')
+            ->where('orders.status', 3)
+            ->where('rider_id', session('user')->id)
+            ->whereDate('orders.created_at', date('Y-m-d'))
+            ->count();
+            
+        $data['delivery_mouth'] = Orders::join('rider_sends', 'rider_sends.order_id', '=', 'orders.id')
+            ->where('orders.status', 3)
+            ->where('rider_id', session('user')->id)
+            ->whereMonth('orders.created_at', date('m'))
+            ->whereYear('orders.created_at', date('Y'))
+            ->count();
     }
+    
+    $data['ordertotal'] = Orders::count();
+    $data['rider'] = User::where('is_rider', 1)->get();
+
+    $menu = Menu::select('id', 'name')->get();
+    $item_menu = array();
+    $item_order = array();
+    if (count($menu) > 0) {
+        foreach ($menu as $rs) {
+            $item_menu[] = $rs->name;
+            $menu_order = OrdersDetails::Join('orders', 'orders.id', '=', 'orders_details.order_id')
+                ->where('orders.status', 3)
+                ->where('menu_id', $rs->id)
+                ->groupBy('menu_id')
+                ->count();
+            $item_order[] = $menu_order;
+        }
+    }
+
+    $item_mouth = array();
+    for ($i = 1; $i < 13; $i++) {
+        $query = Orders::select(DB::raw("SUM(total)as total"))
+            ->where('status', 3)
+            ->whereMonth('created_at', $i)
+            ->whereYear('created_at', date('Y'))
+            ->first();
+        $item_mouth[] = $query->total ?? 0; 
+    }
+    
+    $data['item_menu'] = $item_menu;
+    $data['item_order'] = $item_order;
+    $data['item_mouth'] = $item_mouth;
+    $data['config'] = Config::first();
+    return view('dashboard', $data);
+}
 
     public function ListOrder()
     {
