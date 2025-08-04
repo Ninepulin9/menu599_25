@@ -1,7 +1,8 @@
 <?php
 
 namespace App\Http\Controllers\admin;
-
+use Illuminate\Contracts\View\View;
+use Illuminate\Contracts\View\Factory;
 use App\Events\OrderCreated;
 use App\Http\Controllers\Controller;
 use App\Models\Categories;
