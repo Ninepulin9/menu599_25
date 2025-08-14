@@ -52,7 +52,7 @@ Route::post('/confirmPay', [Main::class, 'confirmPay'])->name('confirmPay');
 Route::post('/admin/order/paymentConfirm', [Admin::class, 'paymentConfirm'])->name('paymentConfirm');
 
 //สั่ง delivery
-Route::get('/delivery', [Delivery::class, 'index'])->name('index');
+Route::get('/delivery', [Delivery::class, 'index'])->name('delivery.index');
 Route::get('/delivery/login', [Delivery::class, 'login'])->name('delivery.login');
 Route::get('/delivery/register', [Delivery::class, 'register'])->name('delivery.register');
 Route::post('/delivery/UsersRegister', [Delivery::class, 'UsersRegister'])->name('delivery.UsersRegister');
@@ -216,6 +216,39 @@ Route::middleware(['role:admin'])->group(function () {
     Route::get('/admin/order/printOrderRider/{id}', [Memberorder::class, 'printOrderRider'])->name('printOrderRider');
     Route::get('/admin/order/printOrderAdmin/{id}', [Admin::class, 'printOrderAdmin'])->name('printOrderAdmin');
     Route::get('/admin/order/printOrderAdminCook/{id}', [Admin::class, 'printOrderAdminCook'])->name('printOrderAdminCook');
+    Route::get('/admin/order/checkNewOrders', [Admin::class, 'checkNewOrders'])->name('checkNewOrders');
+    Route::middleware(['role:admin'])->group(function () {
+    // เมนูอาหาร
+    Route::get('/admin/menu', [Menu::class, 'menu'])->name('menu');
+    Route::post('/admin/menu/menulistData', [Menu::class, 'menulistData'])->name('menulistData');
+    Route::get('/admin/menu/create', [Menu::class, 'MenuCreate'])->name('MenuCreate');
+    Route::get('/admin/menu/edit/{id}', [Menu::class, 'menuEdit'])->name('menuEdit');
+    Route::post('/admin/menu/delete', [Menu::class, 'menuDelete'])->name('menuDelete');
+    Route::post('/admin/menu/save', [Menu::class, 'menuSave'])->name('menuSave');
+    // จัดการเมนู
+    Route::post('/admin/menu/toggle-status', [Menu::class, 'toggleMenuStatus'])->name('toggleMenuStatus');
+    Route::post('/admin/menu/update-stock', [Menu::class, 'updateMenuStock'])->name('updateMenuStock');
+    Route::post('/check-menu-availability', [Main::class, 'checkMenuAvailability'])->name('checkMenuAvailability');
+    Route::get('/available-menus/{categoryId}', [Main::class, 'getAvailableMenus'])->name('getAvailableMenus');
+    // ตรวจสอบสถานะหมวดหมู่
+    Route::post('/check-category-availability', [Main::class, 'checkCategoryAvailability'])->name('checkCategoryAvailability');
+    // ดึงสถิติเมนู
+    Route::get('/menu-statistics', [Main::class, 'getMenuStatistics'])->name('getMenuStatistics');
+    // ดึงเมนูที่จะเปิดขายเร็วๆ นี้
+    Route::get('/upcoming-menus', [Main::class, 'getUpcomingMenus'])->name('getUpcomingMenus');
+    //เปลียนสถานะเมนู
+    Route::post('/admin/menu/update-stock', [Menu::class, 'updateMenuStock'])->name('updateMenuStock');
+    //ตรวจสอบหน้ารายการชำระเงิน
+    Route::post('/admin/order/confirm-slip-payment', [Admin::class, 'confirmSlipPayment'])->name('confirmSlipPayment');
+    Route::post('/admin/order/reject-slip-payment', [Admin::class, 'rejectSlipPayment'])->name('rejectSlipPayment');
+    Route::get('/admin/order/printReceiptFromOrder/{id}', [Admin::class, 'printReceiptFromOrder'])->name('printReceiptFromOrder');
+    //โต้ะ
+    Route::post('/admin/table/check-exists', [Table::class, 'checkTableExists'])->name('checkTableExists');
+    Route::get('/admin/table/statistics', [Table::class, 'getTableStatistics'])->name('getTableStatistics');
+    Route::get('/admin/table/download-qr/{id}', [Table::class, 'downloadQRCode'])->name('downloadQRCode');
+    Route::post('/admin/table/search', [Table::class, 'searchTables'])->name('searchTables');
+
+});
 });
 
 
