@@ -16,7 +16,6 @@ return new class extends Migration
             // เพิ่มคอลัมน์ image หลัง status
             $table->string('image')->nullable()->after('status');
 
-            // เพิ่มคอลัมน์ is_print_cook หลัง image
             $table->boolean('is_print_cook')->default(false)->after('image');
         });
     }
