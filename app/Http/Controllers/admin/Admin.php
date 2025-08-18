@@ -402,10 +402,9 @@ class Admin extends Controller
             DB::beginTransaction();
             
             $pay = new Pay();
-            $pay->payment_number = $this->generateRunningNumber();
             $pay->table_id = $id;
             $pay->total = $total->total;
-            $pay->is_type = $paymentType;
+            $pay->is_type = $paymentType; 
             
             // เพิ่มข้อมูลเงินสดและเงินทอน
             if ($paymentType == 0) {
@@ -417,7 +416,7 @@ class Admin extends Controller
                 $orders = Orders::where('table_id', $id)->whereIn('status', [1, 2])->get();
                 
                 foreach ($orders as $order) {
-                    $order->status = 3;
+                    $order->status = 3; 
                     if ($order->save()) {
                         $paygroup = new PayGroup();
                         $paygroup->pay_id = $pay->id;
@@ -440,6 +439,9 @@ class Admin extends Controller
                     } else {
                         $message .= '<br>จ่ายพอดี';
                     }
+                } else {
+                    $message .= '<br>เลขที่ใบเสร็จ: ' . $pay->payment_number;
+                    $message .= '<br>ประเภท: เงินโอน (ชำระหน้าร้าน)';
                 }
                 
                 $data = [
@@ -459,15 +461,15 @@ class Admin extends Controller
             
         } catch (\Exception $e) {
             DB::rollback();
-            \Log::error('Payment Error: ' . $e->getMessage());
+            \Log::error('Admin Payment Error: ' . $e->getMessage());
             $data['message'] = 'เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' . $e->getMessage();
         }
     }
     
     return response()->json($data);
-}
 
-private function sendPaymentNotification($tableId, $pay, $paymentType)
+}
+    private function sendPaymentNotification($tableId, $pay, $paymentType)
 {
     try {
         $table = Table::find($tableId);
@@ -771,21 +773,47 @@ foreach ($orderList as $order) {
     $orderId = $request->input('order_id');
 
     if ($orderId) {
-        $order = Orders::find($orderId);
+        try {
+            DB::beginTransaction();
+            
+            $order = Orders::find($orderId);
 
-        if ($order && $order->status == 4) {
-            $order->status = 5;
+            if ($order && $order->status == 4) { 
+                
+                $pay = new Pay();
+                $pay->table_id = $order->table_id;
+                $pay->total = $order->total_amount ?? $order->total;
+                $pay->is_type = 1; 
+                $pay->save(); 
 
-            if ($order->save()) {
-           
+                $order->status = 5; 
+                $order->save();
+
+                if (class_exists('App\Models\PayGroup')) {
+                    $payGroup = new PayGroup();
+                    $payGroup->pay_id = $pay->id;
+                    $payGroup->order_id = $order->id;
+                    $payGroup->save();
+                }
+
+                DB::commit();
+
+                $this->sendPaymentConfirmationNotification($order->table_id, $pay);
                 
                 $data = [
                     'status' => true,
-                    'message' => 'ยืนยันการชำระเงินเรียบร้อยแล้ว',
+                    'message' => 'ยืนยันการชำระเงินเรียบร้อยแล้ว เลขที่ใบเสร็จ: ' . $pay->payment_number,
+                    'payment_number' => $pay->payment_number
                 ];
+                
+            } else {
+                $data['message'] = 'ไม่พบออเดอร์หรือสถานะไม่ถูกต้อง';
             }
-        } else {
-            $data['message'] = 'ไม่พบออเดอร์หรือสถานะไม่ถูกต้อง';
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Confirm slip payment error: ' . $e->getMessage());
+            $data['message'] = 'เกิดข้อผิดพลาด: ' . $e->getMessage();
         }
     }
 
@@ -794,20 +822,25 @@ foreach ($orderList as $order) {
 
    
     public function rejectSlipPayment(Request $request)
-    {
-        $data = [
-            'status' => false,
-            'message' => 'ไม่สามารถปฏิเสธการชำระเงินได้',
-        ];
+{
+    $data = [
+        'status' => false,
+        'message' => 'ไม่สามารถปฏิเสธการชำระเงินได้',
+    ];
 
-        $orderId = $request->input('order_id');
-        $reason = $request->input('reason', '');
+    $orderId = $request->input('order_id');
+    $reason = $request->input('reason', '');
 
-        if ($orderId) {
+    if ($orderId) {
+        try {
+            DB::beginTransaction();
+            
             $order = Orders::find($orderId);
 
-            if ($order && $order->status == 4) {
-                $order->status = 1;
+            if ($order && $order->status == 4) { // ตรวจสอบว่าอยู่ในสถานะรอตรวจสอบ
+                
+                // กลับไปสถานะ "เสิร์ฟแล้ว" เพื่อให้สามารถชำระใหม่ได้
+                $order->status = 2; // 2 = เสิร์ฟออเดอร์แล้ว
 
                 // ลบรูปสลิป
                 if ($order->image) {
@@ -821,23 +854,97 @@ foreach ($orderList as $order) {
                 // เพิ่มเหตุผลในหมายเหตุ
                 if ($reason) {
                     $currentRemark = $order->remark;
-                    $rejectNote = 'ปฏิเสธการชำระเงิน: ' . $reason;
+                    $rejectNote = 'ปฏิเสธสลิป: ' . $reason;
                     $order->remark = $currentRemark ? $currentRemark . ' | ' . $rejectNote : $rejectNote;
                 }
 
-                if ($order->save()) {
-                    $data = [
-                        'status' => true,
-                        'message' => 'ปฏิเสธการชำระเงินเรียบร้อยแล้ว',
-                    ];
-                }
+                $order->save();
+
+                DB::commit();
+
+                // ส่งการแจ้งเตือนปฏิเสธ
+                $this->sendPaymentRejectionNotification($order->table_id, $reason);
+                
+                $data = [
+                    'status' => true,
+                    'message' => 'ปฏิเสธการชำระเงินเรียบร้อยแล้ว<br>เหตุผล: ' . $reason,
+                ];
+                
             } else {
                 $data['message'] = 'ไม่พบออเดอร์หรือสถานะไม่ถูกต้อง';
             }
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Reject slip payment error: ' . $e->getMessage());
+            $data['message'] = 'เกิดข้อผิดพลาด: ' . $e->getMessage();
         }
-
-        return response()->json($data);
     }
+
+    return response()->json($data);
+}
+
+private function sendPaymentConfirmationNotification($tableId, $pay)
+{
+    try {
+        $table = Table::find($tableId);
+        $tableNumber = $table ? $table->table_number : 'ไม่ระบุ';
+        
+        $message = "✅ ยืนยันการชำระเงินจาก โต้ะ {$tableNumber}";
+        $subMessage = "เลขใบเสร็จ: {$pay->payment_number} | ยอดเงิน: " . number_format($pay->total, 2) . " บาท";
+        
+        if (Schema::hasTable('notifications')) {
+            DB::table('notifications')->insert([
+                'type' => 'payment_confirmed',
+                'table_id' => $tableId,
+                'table_number' => $tableNumber,
+                'message' => $message,
+                'sub_message' => $subMessage,
+                'amount' => $pay->total,
+                'payment_number' => $pay->payment_number,
+                'is_read' => false,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+        
+        event(new OrderCreated([$message . " - " . $subMessage]));
+        
+    } catch (\Exception $e) {
+        \Log::error('Payment confirmation notification error: ' . $e->getMessage());
+    }
+}
+
+    private function sendPaymentRejectionNotification($tableId, $reason)
+{
+    try {
+        $table = Table::find($tableId);
+        $tableNumber = $table ? $table->table_number : 'ไม่ระบุ';
+        
+        $message = "❌ ปฏิเสธการชำระเงินจาก โต้ะ {$tableNumber}";
+        $subMessage = "เหตุผล: {$reason}";
+        
+        if (Schema::hasTable('notifications')) {
+            DB::table('notifications')->insert([
+                'type' => 'payment_rejected',
+                'table_id' => $tableId,
+                'table_number' => $tableNumber,
+                'message' => $message,
+                'sub_message' => $subMessage,
+                'is_read' => false,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+        
+        event(new OrderCreated([$message . " - " . $subMessage]));
+        
+    } catch (\Exception $e) {
+        \Log::error('Payment rejection notification error: ' . $e->getMessage());
+    }
+}
+
+
     public function printReceiptFromOrder($orderId)
 {
     $config = Config::first();
